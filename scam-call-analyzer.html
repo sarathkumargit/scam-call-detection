@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scam Call Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; color: #1a1a18; min-height: 100vh; }
+
+  /* Header */
+  .header { background: #fff; border-bottom: 1px solid #e0dfd7; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+  .header h1 { font-size: 18px; font-weight: 500; }
+  .header .sub { font-size: 13px; color: #888780; margin-left: auto; }
+
+  .main { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+
+  /* Upload zone */
+  .upload-zone { border: 2px dashed #d3d1c7; border-radius: 12px; background: #fff; padding: 48px 24px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; margin-bottom: 24px; }
+  .upload-zone.drag { border-color: #534AB7; background: #EEEDFE; }
+  .upload-zone.hidden { display: none; }
+  .upload-icon { font-size: 40px; margin-bottom: 12px; }
+  .upload-zone h2 { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+  .upload-zone p { font-size: 13px; color: #888780; margin-bottom: 16px; }
+  .upload-btn { display: inline-block; padding: 8px 20px; border-radius: 8px; background: #534AB7; color: #fff; font-size: 14px; cursor: pointer; border: none; font-family: inherit; }
+  .upload-btn:hover { background: #3C3489; }
+  input[type=file] { display: none; }
+
+  /* Dashboard */
+  .dashboard { display: none; }
+  .dashboard.visible { display: block; }
+
+  .top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .file-badge { background: #EEEDFE; color: #3C3489; font-size: 13px; padding: 5px 12px; border-radius: 20px; font-weight: 500; }
+  .reset-btn { margin-left: auto; padding: 6px 14px; border-radius: 8px; border: 1px solid #d3d1c7; background: #fff; font-size: 13px; cursor: pointer; color: #5F5E5A; font-family: inherit; }
+  .reset-btn:hover { background: #f1efe8; }
+
+  /* Metrics */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .metric { background: #fff; border-radius: 10px; border: 1px solid #e0dfd7; padding: 14px 16px; }
+  .metric .lbl { font-size: 12px; color: #888780; margin-bottom: 4px; }
+  .metric .val { font-size: 26px; font-weight: 500; }
+
+  /* Chart + legend */
+  .chart-row { display: flex; align-items: center; gap: 32px; background: #fff; border: 1px solid #e0dfd7; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; }
+  .legend { display: flex; flex-direction: column; gap: 10px; }
+  .li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #5F5E5A; }
+  .ld { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .li strong { color: #1a1a18; }
+
+  /* Rules info */
+  .rules { background: #f1efe8; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; font-size: 13px; color: #5F5E5A; line-height: 1.7; }
+  .rules strong { color: #1a1a18; }
+
+  /* Filters */
+  .filters { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .flbl { font-size: 13px; color: #888780; }
+  .fbtn { padding: 6px 16px; border-radius: 20px; border: 1px solid #d3d1c7; background: #fff; color: #5F5E5A; font-size: 13px; cursor: pointer; font-family: inherit; transition: background .1s; }
+  .fbtn:hover { background: #f1efe8; }
+  .fbtn.active { background: #1a1a18; color: #fff; border-color: #1a1a18; font-weight: 500; }
+
+  /* Table */
+  .tbl-wrap { background: #fff; border: 1px solid #e0dfd7; border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 12px; color: #888780; font-weight: 400; background: #f8f7f4; border-bottom: 1px solid #e0dfd7; white-space: nowrap; font-size: 12px; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f1efe8; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafaf8; }
+
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .bs { background: #FCEBEB; color: #A32D2D; }
+  .bw { background: #FAEEDA; color: #854F0B; }
+  .bc { background: #EAF3DE; color: #3B6D11; }
+  .rsn { font-size: 11px; color: #888780; margin-top: 3px; line-height: 1.4; }
+  .rpt { display: inline-block; background: #f1efe8; border-radius: 3px; padding: 1px 6px; font-size: 10px; color: #888780; margin-left: 4px; border: 1px solid #e0dfd7; font-weight: 600; }
+  .dir-in { color: #185FA5; }
+  .dir-out { color: #3B6D11; }
+  .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; }
+
+  /* Summary row at bottom */
+  .summary-footer { margin-top: 16px; padding: 12px 16px; background: #fff; border: 1px solid #e0dfd7; border-radius: 10px; font-size: 13px; color: #5F5E5A; line-height: 1.8; }
+  .summary-footer strong { color: #1a1a18; }
+
+  /* Error */
+  .error-msg { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #A32D2D; margin-bottom: 16px; display: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#534AB7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.09 9.81a19.79 19.79 0 01-3.07-8.63A2 2 0 012 .18h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/></svg>
+  <h1>Scam Call Analyzer</h1>
+  <span class="sub">Drop any GHL call report CSV to analyze</span>
+</div>
+
+<div class="main">
+
+  <div class="error-msg" id="errorMsg"></div>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="uploadZone">
+    <div class="upload-icon">📂</div>
+    <h2>Drop your GHL call report CSV here</h2>
+    <p>Export from GHL → Reporting → Call Reporting → Export CSV<br>Then drag it here or click below</p>
+    <label class="upload-btn" for="fileInput">Choose CSV file</label>
+    <input type="file" id="fileInput" accept=".csv">
+  </div>
+
+  <!-- Dashboard -->
+  <div class="dashboard" id="dashboard">
+
+    <div class="top-bar">
+      <span>📄</span>
+      <span class="file-badge" id="fileBadge">filename.csv</span>
+      <span id="callCount" style="font-size:13px;color:#888780"></span>
+      <button class="reset-btn" onclick="resetTool()">↩ Load another file</button>
+    </div>
+
+    <div class="metrics" id="metrics"></div>
+
+    <div class="chart-row">
+      <div style="position:relative;width:140px;height:140px;flex-shrink:0">
+        <canvas id="donut" role="img" aria-label="Donut chart showing call risk distribution">Call risk breakdown.</canvas>
+      </div>
+      <div class="legend" id="lgnd"></div>
+    </div>
+
+    <div class="rules">
+      <strong>Detection rules applied:</strong>
+      &nbsp;🔴 Answered ≤ 10s &nbsp;|&nbsp;
+      🔴 Same unknown number 5+ times &nbsp;|&nbsp;
+      🔴 Unknown number 3+ calls no engagement &nbsp;|&nbsp;
+      🟡 Answered 11–30s unknown &nbsp;|&nbsp;
+      🟡 Unknown inbound voicemail &nbsp;|&nbsp;
+      🟡 No answer / Busy / Failed unknown &nbsp;|&nbsp;
+      🟢 Known contact &nbsp;|&nbsp;
+      🟢 Conversation &gt; 30s
+    </div>
+
+    <div class="filters">
+      <span class="flbl">Filter:</span>
+      <button class="fbtn active" onclick="doFilter(this,'all')" id="btn-all">All</button>
+      <button class="fbtn" onclick="doFilter(this,'scam')" id="btn-scam">🔴 Scam</button>
+      <button class="fbtn" onclick="doFilter(this,'suspicious')" id="btn-susp">🟡 Suspicious</button>
+      <button class="fbtn" onclick="doFilter(this,'clean')" id="btn-clean">🟢 Clean</button>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:125px">Date & time</th>
+            <th style="width:130px">Phone</th>
+            <th style="width:90px">Direction</th>
+            <th style="width:90px">Status</th>
+            <th style="width:65px">Duration</th>
+            <th>Classification & reason</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="summary-footer" id="summaryFooter"></div>
+
+  </div>
+</div>
+
+<script>
+let chartInstance = null;
+let allCalls = [];
+let phoneCounts = {};
+
+// ── CSV Parser ──────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return null;
+
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = splitCSVLine(lines[i]);
+    if (vals.length < 5) continue;
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim().replace(/^"|"$/g, ''); });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function splitCSVLine(line) {
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') { inQ = !inQ; }
+    else if (line[i] === ',' && !inQ) { result.push(cur); cur = ''; }
+    else { cur += line[i]; }
+  }
+  result.push(cur);
+  return result;
+}
+
+// ── Duration parser (MM:SS → seconds) ──────────────────────
+function parseDur(d) {
+  if (!d || d === '-' || d.trim() === '') return -1;
+  const parts = d.split(':').map(Number);
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return -1;
+}
+
+// ── Scam classifier ─────────────────────────────────────────
+function classify(row, freq) {
+  const contact = row['contact name'] || row['contact'] || 'Unknown';
+  const status  = row['call status'] || row['status'] || '';
+  const dir     = row['direction'] || '';
+  const dur     = row['duration'] || '';
+  const secs    = parseDur(dur);
+  const known   = contact.trim() !== '' && contact.trim().toLowerCase() !== 'unknown' && contact.trim() !== '-';
+
+  if (known) {
+    if (status === 'Answered' && secs >= 0 && secs <= 10)
+      return { level: 'suspicious', reason: 'Very short ' + secs + 's answered — possible auto-dial drop' };
+    return { level: 'clean', reason: 'Known contact: ' + contact.trim() };
+  }
+
+  if (status === 'Answered' && secs >= 0 && secs <= 10)
+    return { level: 'scam', reason: 'Answered but disconnected in ' + secs + 's — instant hang-up' };
+  if (freq >= 5)
+    return { level: 'scam', reason: 'Same unknown number appeared ' + freq + '× — spam pattern' };
+  if (freq >= 3)
+    return { level: 'scam', reason: freq + ' calls from this number, zero real engagement' };
+  if (status === 'Answered' && secs > 10 && secs <= 30)
+    return { level: 'suspicious', reason: 'Short ' + secs + 's call from unknown number' };
+  if (status.toLowerCase().includes('voicemail') && dir.toLowerCase() === 'inbound')
+    return { level: 'suspicious', reason: 'Unknown caller left inbound voicemail' };
+  if (['no answer','busy','failed'].includes(status.toLowerCase()))
+    return { level: 'suspicious', reason: status + ' — unverified number' };
+  if (status === 'Answered' && secs > 30)
+    return { level: 'clean', reason: 'Real conversation — ' + dur + ' duration' };
+
+  return { level: 'suspicious', reason: 'Insufficient engagement data' };
+}
+
+// ── Main analysis ────────────────────────────────────────────
+function analyzeData(rows) {
+  // Count phone frequencies
+  phoneCounts = {};
+  rows.forEach(r => {
+    const ph = r['contact phone'] || r['phone'] || r['from'] || '';
+    if (ph) phoneCounts[ph] = (phoneCounts[ph] || 0) + 1;
+  });
+
+  allCalls = rows.map(r => {
+    const phone = r['contact phone'] || r['phone'] || r['from'] || '';
+    const freq  = phoneCounts[phone] || 1;
+    return { r, cls: classify(r, freq), phone, freq };
+  });
+}
+
+// ── Render dashboard ─────────────────────────────────────────
+function renderDashboard(filename) {
+  const totals = { scam: 0, suspicious: 0, clean: 0 };
+  allCalls.forEach(c => totals[c.cls.level]++);
+  const total = allCalls.length;
+
+  document.getElementById('fileBadge').textContent = filename;
+  document.getElementById('callCount').textContent = total + ' calls analyzed';
+
+  document.getElementById('btn-all').textContent   = 'All (' + total + ')';
+  document.getElementById('btn-scam').textContent  = '🔴 Scam (' + totals.scam + ')';
+  document.getElementById('btn-susp').textContent  = '🟡 Suspicious (' + totals.suspicious + ')';
+  document.getElementById('btn-clean').textContent = '🟢 Clean (' + totals.clean + ')';
+
+  document.getElementById('metrics').innerHTML =
+    metric('Total calls', total, '#1a1a18') +
+    metric('Scam', totals.scam, '#A32D2D') +
+    metric('Suspicious', totals.suspicious, '#854F0B') +
+    metric('Clean', totals.clean, '#3B6D11');
+
+  document.getElementById('lgnd').innerHTML =
+    li('#E24B4A', 'Scam', totals.scam, total) +
+    li('#EF9F27', 'Suspicious', totals.suspicious, total) +
+    li('#639922', 'Clean', totals.clean, total);
+
+  // Identify top repeat spammers
+  const spammers = Object.entries(phoneCounts)
+    .filter(([,c]) => c >= 3)
+    .sort((a,b) => b[1]-a[1])
+    .slice(0, 3);
+  const spammerText = spammers.length
+    ? '<strong>Top repeat numbers:</strong> ' + spammers.map(([ph,c]) => ph + ' (' + c + '×)').join(' &nbsp;|&nbsp; ')
+    : 'No high-frequency repeat numbers detected.';
+  document.getElementById('summaryFooter').innerHTML = spammerText;
+
+  // Donut chart
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(document.getElementById('donut'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Scam', 'Suspicious', 'Clean'],
+      datasets: [{ data: [totals.scam, totals.suspicious, totals.clean], backgroundColor: ['#E24B4A','#EF9F27','#639922'], borderWidth: 0, hoverOffset: 4 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '68%' }
+  });
+
+  renderTable('all');
+
+  document.getElementById('uploadZone').classList.add('hidden');
+  document.getElementById('dashboard').classList.add('visible');
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-all').classList.add('active');
+}
+
+function metric(label, value, color) {
+  return `<div class="metric"><div class="lbl">${label}</div><div class="val" style="color:${color}">${value}</div></div>`;
+}
+
+function li(color, label, count, total) {
+  return `<div class="li"><div class="ld" style="background:${color}"></div><span><strong>${label}</strong> — ${count} calls (${Math.round(count/total*100)}%)</span></div>`;
+}
+
+// ── Table renderer ───────────────────────────────────────────
+function renderTable(filter) {
+  const rows = allCalls.filter(c => filter === 'all' || c.cls.level === filter);
+  if (rows.length === 0) {
+    document.getElementById('tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#888780">No calls in this category</td></tr>';
+    return;
+  }
+  document.getElementById('tbody').innerHTML = rows.map(({ r, cls, phone, freq }) => {
+    const dt     = r['date & time'] || r['date'] || r['datetime'] || '';
+    const dir    = r['direction'] || '';
+    const status = r['call status'] || r['status'] || '';
+    const dur    = r['duration'] || '';
+    const repeat = freq > 1 ? `<span class="rpt">${freq}×</span>` : '';
+    const dirIcon = dir.toLowerCase() === 'inbound'
+      ? '<span class="dir-in">↙ inbound</span>'
+      : '<span class="dir-out">↗ outbound</span>';
+    const bc = cls.level === 'scam' ? 'bs' : cls.level === 'suspicious' ? 'bw' : 'bc';
+    const bl = cls.level === 'scam' ? '🔴 Scam' : cls.level === 'suspicious' ? '🟡 Suspicious' : '🟢 Clean';
+    return `<tr>
+      <td style="color:#5F5E5A;font-size:12px">${dt}</td>
+      <td class="mono">${phone}${repeat}</td>
+      <td style="font-size:12px">${dirIcon}</td>
+      <td style="color:#5F5E5A;font-size:12px">${status}</td>
+      <td class="mono">${dur || '—'}</td>
+      <td><span class="badge ${bc}">${bl}</span><div class="rsn">${cls.reason}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function doFilter(btn, f) {
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable(f);
+}
+
+// ── File handling ────────────────────────────────────────────
+function handleFile(file) {
+  if (!file || !file.name.endsWith('.csv')) {
+    showError('Please upload a CSV file.');
+    return;
+  }
+  hideError();
+  const reader = new FileReader();
+  reader.onload = e => {
+    const rows = parseCSV(e.target.result);
+    if (!rows || rows.length === 0) { showError('Could not read this CSV. Make sure it is a GHL call report export.'); return; }
+    analyzeData(rows);
+    renderDashboard(file.name);
+  };
+  reader.readAsText(file);
+}
+
+function resetTool() {
+  document.getElementById('dashboard').classList.remove('visible');
+  document.getElementById('uploadZone').classList.remove('hidden');
+  document.getElementById('fileInput').value = '';
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+}
+
+function showError(msg) { const e = document.getElementById('errorMsg'); e.textContent = msg; e.style.display = 'block'; }
+function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
+
+// File input
+document.getElementById('fileInput').addEventListener('change', e => { handleFile(e.target.files[0]); });
+
+// Drag and drop
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+zone.addEventListener('click', e => { if (e.target.tagName !== 'LABEL' && e.target.tagName !== 'INPUT') document.getElementById('fileInput').click(); });
+</script>
+</body>
+</html>
